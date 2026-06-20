@@ -2,18 +2,19 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Pack, Card } from '@/types'
-import CardItem from '@/components/cards/CardItem'
 import toast from 'react-hot-toast'
-import { Sparkles, Star } from 'lucide-react'
+import { Sparkles } from 'lucide-react'
+import PackOpeningScene from '@/components/pack/PackOpeningScene'
 
 export default function PackPage() {
   const supabase = createClient()
   const [packs, setPacks] = useState<Pack[]>([])
   const [loading, setLoading] = useState(true)
   const [opening, setOpening] = useState(false)
+
+  // active opening scene state
+  const [activePack, setActivePack] = useState<Pack | null>(null)
   const [revealedCards, setRevealedCards] = useState<Card[]>([])
-  const [showReveal, setShowReveal] = useState(false)
-  const [flipped, setFlipped] = useState<boolean[]>([])
 
   useEffect(() => { fetchPacks() }, [])
 
@@ -37,16 +38,10 @@ export default function PackPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'เปิดแพ็คไม่สำเร็จ')
 
+      // Pre-fetch results, then hand off to the opening scene —
+      // the scene itself controls pacing (select → cut → reveal)
       setRevealedCards(data.cards)
-      setFlipped(new Array(data.cards.length).fill(false))
-      setShowReveal(true)
-
-      // Auto flip cards with delay
-      data.cards.forEach((_: Card, i: number) => {
-        setTimeout(() => {
-          setFlipped(f => { const n = [...f]; n[i] = true; return n })
-        }, 300 + i * 400)
-      })
+      setActivePack(pack)
     } catch (e: any) {
       toast.error(e.message)
     } finally {
@@ -54,8 +49,8 @@ export default function PackPage() {
     }
   }
 
-  const closeReveal = () => {
-    setShowReveal(false)
+  const closeScene = () => {
+    setActivePack(null)
     setRevealedCards([])
   }
 
@@ -124,35 +119,15 @@ export default function PackPage() {
         ))}
       </div>
 
-      {/* Card Reveal Modal */}
-      {showReveal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-dark-800 rounded-2xl p-8 max-w-3xl w-full border border-dark-500">
-            <div className="text-center mb-8">
-              <h2 className="font-display text-3xl text-gold-gradient">การ์ดที่ได้รับ!</h2>
-              <div className="flex justify-center gap-1 mt-2">
-                {[...Array(5)].map((_, i) => <Star key={i} size={16} className="text-gold-400" fill="#f59e0b" />)}
-              </div>
-            </div>
-
-            <div className="flex flex-wrap justify-center gap-4 mb-8">
-              {revealedCards.map((card, i) => (
-                <div
-                  key={i}
-                  className="transition-all duration-500"
-                  style={{ opacity: flipped[i] ? 1 : 0, transform: flipped[i] ? 'scale(1)' : 'scale(0.5)' }}
-                >
-                  <CardItem card={card} size="md" animate={card.rarity === 'legend' || card.rarity === 'secret'} />
-                </div>
-              ))}
-            </div>
-
-            <div className="flex justify-center gap-3">
-              <button onClick={closeReveal} className="btn-outline">ปิด</button>
-              <button onClick={closeReveal} className="btn-gold">ดูคลังการ์ด</button>
-            </div>
-          </div>
-        </div>
+      {/* Full-screen 3D pack opening experience:
+          select pack (3D, swipe up to cut) → cutting animation → swipe through cards */}
+      {activePack && (
+        <PackOpeningScene
+          packImageUrl={activePack.image_url}
+          packName={activePack.name}
+          cards={revealedCards}
+          onClose={closeScene}
+        />
       )}
     </div>
   )
